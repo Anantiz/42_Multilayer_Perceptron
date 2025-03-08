@@ -4,7 +4,7 @@ project(mlp_module)
 
 # Compiler options
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -mavx -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -mavx -march=native")
 
 # Dependencies and includes
 find_package(pybind11 REQUIRED)

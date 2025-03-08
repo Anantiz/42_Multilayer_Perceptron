@@ -10,6 +10,10 @@ void bind_matrix(py::module &m, const std::string &type_name) {
         .def(py::init<uint32_t, uint32_t>(),
             "Initialize matrix with given rows and columns",
             py::arg("rows"), py::arg("cols"))
+        .def(py::init<const std::string&>(),
+            "Initialize matrix from string representation",
+            py::arg("string_repr"))
+        .def("export_string", &Matrix<T>::export_string, "Export matrix to string")
         .def("zeros", &Matrix<T>::zeros, "Set all elements to zero")
         .def("identity", &Matrix<T>::identity, "Set matrix to identity matrix")
         .def("fill", &Matrix<T>::fill, "Fill matrix with a specific value")

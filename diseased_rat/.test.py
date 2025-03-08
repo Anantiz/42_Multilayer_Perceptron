@@ -10,14 +10,14 @@ def main():
     try:
         # Parameters
         lr = 0.01
-        input_size = 2
+        input_size = 3
         output_size = 2
 
         # Define hidden layers
         hidden_layers = [
-            (input_size, SIGMOID),  # Layer 1
-            (8, SIGMOID),           # Layer 2
-            (16, SIGMOID),          # Layer 3
+            (input_size, RELU),  # Layer 1
+            (8, RELU),           # Layer 2
+            (16, RELU),          # Layer 3
             (output_size, SOFTMAX)  # Output layer
         ]
 
@@ -25,47 +25,43 @@ def main():
         mlp = Mlp(input_size, output_size, lr, hidden_layers)
 
         # Create mock input
-        mock_input = Matrix(input_size,1)
+        mock_input_A = Matrix(input_size,1)
+        mock_input_B = Matrix(input_size,1)
 
         # Test without training
-        mock_input.set_at_flat(0, 1)
-        mock_input.set_at_flat(1, 0)
-        nn_result = mlp.forward(mock_input, False)
+        mock_input_A.set_at_flat(0, 1)
+        mock_input_A.set_at_flat(1, 0)
+        mock_input_A.set_at_flat(2, 0)
+        nn_result = mlp.forward(mock_input_A, False)
         print("No training")
         print(f" Predict A: {nn_result[0]} {nn_result[1]}")
 
-        mock_input.set_at_flat(0, 1)
-        mock_input.set_at_flat(1, 5)
-        nn_result = mlp.forward(mock_input, False)
+        mock_input_B.set_at_flat(0, 1)
+        mock_input_B.set_at_flat(1, 0)
+        mock_input_B.set_at_flat(2, 1)
+        nn_result = mlp.forward(mock_input_B, False)
         print(f" Predict B: {nn_result[0]} {nn_result[1]}")
 
+
         # Train the MLP
-        epochs = 500
+        epochs = 1500
         for i in range(epochs):
             # Train with input A
-            mock_input.set_at_flat(0, 1)
-            mock_input.set_at_flat(1, 0)
             true_label_index = 0
-            nn_result = mlp.forward(mock_input, True)
-            mlp.backward(nn_result, mock_input, true_label_index)
+            nn_result = mlp.forward(mock_input_A, True)
+            mlp.backward(nn_result, mock_input_A, true_label_index)
 
             # Train with input B
-            mock_input.set_at_flat(0, 1)
-            mock_input.set_at_flat(1, 5)
             true_label_index = 1
-            nn_result = mlp.forward(mock_input, True)
-            mlp.backward(nn_result, mock_input, true_label_index)
+            nn_result = mlp.forward(mock_input_B, True)
+            mlp.backward(nn_result, mock_input_B, true_label_index)
 
         # Test after training
-        mock_input.set_at_flat(0, 1)
-        mock_input.set_at_flat(1, 0)
-        nn_result = mlp.forward(mock_input, False)
+        nn_result = mlp.forward(mock_input_A, False)
         print("\nAfter training")
         print(f" Predict A: {nn_result[0]} {nn_result[1]}")
 
-        mock_input.set_at_flat(0, 1)
-        mock_input.set_at_flat(1, 5)
-        nn_result = mlp.forward(mock_input, False)
+        nn_result = mlp.forward(mock_input_B, False)
         print(f" Predict B: {nn_result[0]} {nn_result[1]}")
 
     except Exception as e:

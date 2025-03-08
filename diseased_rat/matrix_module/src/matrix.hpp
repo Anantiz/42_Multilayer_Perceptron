@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sstream>
 #include <immintrin.h>  // AVX and SSE; SIMD intrinsics
 
 #define MATRIX_ALLIGNEMENT_SIZE 32
@@ -60,6 +61,20 @@ public:
         }
     }
 
+    Matrix(const std::string& string_repr) {
+        std::istringstream iss(string_repr);
+        iss >> _rows >> _cols;
+        _size = _rows * _cols;
+        _cleanup = true;
+        _data = (T*)aligned_alloc(MATRIX_ALLIGNEMENT_SIZE, _size * _dtype_size);
+        if (_data == nullptr) {
+            throw std::bad_alloc();
+        }
+        for (unsigned int i = 0; i < _size; i++) {
+            iss >> _data[i];
+        }
+    }
+
     /**
      * !! DANGEROUS !!
      * Constructor from raw data, takes ownership of the data
@@ -89,7 +104,7 @@ public:
             }
         }
         else {
-            // Auto-cleanup is disabled, we can't take ownership of the buffer
+            // Auto-cleanup is disabled, we can't take reuse the buffer
             new_buff = (T*)aligned_alloc(MATRIX_ALLIGNEMENT_SIZE, _size * _dtype_size);
             if (new_buff == nullptr)
                 throw std::bad_alloc();
@@ -166,9 +181,9 @@ public:
         return *this;
     }
 
-    Matrix<T> &xavier_init() {
+    Matrix<T> &xavier_init(double n) {
         // A nice randomizer for sigmoid activation
-        T scale = sqrt(6.0 / (_rows + _cols));
+        T scale = sqrt(n / (_rows + _cols));
         return randomize(-scale, scale);
     }
 
@@ -612,4 +627,38 @@ public:
         return _data[index];
     }
 
+    /**
+     * @brief
+     * Returns a string representation of the matrix to save it to a file
+     * Can be re-imported with the string constructor
+     */
+    std::string export_string() {
+        std::string result = std::to_string(_rows) + " " + std::to_string(_cols) + " ";
+        for (unsigned int i = 0; i < _size; i++) {
+            result += std::to_string(_data[i]) + " ";
+        }
+        return result;
+    }
+
+    T argmax_index() const {
+        T max = _data[0];
+        T index = 0;
+        for (unsigned int i = 1; i < _size; i++) {
+            if (_data[i] > max) {
+                max = _data[i];
+                index = i;
+            }
+        }
+        return index;
+    }
+
+    T argmax_value() const {
+        T max = _data[0];
+        for (unsigned int i = 1; i < _size; i++) {
+            if (_data[i] > max) {
+                max = _data[i];
+            }
+        }
+        return max;
+    }
 };

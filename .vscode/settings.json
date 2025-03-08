@@ -71,7 +71,10 @@
         "thread": "cpp",
         "typeindex": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "strstream": "cpp",
+        "codecvt": "cpp",
+        "cfenv": "cpp"
     },
     "cmake.sourceDirectory": "/home/myos/Projects/42/Perceptron/diseased_rat"
 }
