@@ -1,6 +1,0 @@
-Model created with 3 layers
-Loading file: ./train_set.csv
-Succesfully loaded 454 samples
-Training with 454 samples
-Training MLP with input size 30, output size 2, epochs 1,training set file ./train_set.csv, save weights file None and hidden layers:
- [(32, 0), (64, 0), (2, 2)]

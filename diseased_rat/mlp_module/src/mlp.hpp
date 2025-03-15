@@ -17,23 +17,53 @@
 
 // Btw, I make templates but I'll onlu use f32 lol, in case I'll reuse the code
 
+/*** MATRIX UTILS ***/
+
+template<typename T>
+double matrix_mean(const Matrix<T> &matrix) {
+    double sum = 0;
+    for (size_t i = 0; i < matrix.size(); i++) {
+        sum += matrix[i];
+    }
+    return sum / matrix.size();
+}
+
+template<typename T>
+double matrix_variance(const Matrix<T> &matrix, double mean) {
+    double sum = 0;
+    for (size_t i = 0; i < matrix.size(); i++) {
+        sum += pow(matrix[i] - mean, 2);
+    }
+    return sum / matrix.size();
+}
+
+template<typename T>
+Matrix<T> &matrix_standardize(Matrix<T> &matrix, const Matrix<T> &gamma, const Matrix<T> &beta) {
+    if (matrix.size() != gamma.size() || matrix.size() != beta.size()) {
+        throw std::invalid_argument("Matrix standardize error: Gamma and beta size mismatch");
+    }
+    double mean = matrix_mean(matrix);
+    double variance = matrix_variance(matrix, mean);
+    double expr = sqrt(variance + EPSILON);
+    for (size_t i = 0; i < matrix.size(); i++) {
+        matrix[i] = (matrix[i] - mean) / expr * gamma[i] + beta[i];
+    }
+    return matrix;
+}
+
+
 /*** ACTIVATIONS ***/
 /*** ACTIVATIONS ***/
 /*** ACTIVATIONS ***/
+
 
 template<typename T>
 Matrix<T> &ReLU(Matrix<T> &input, Matrix<T> &output) {
     if (input.size() != output.size()) {
         throw std::invalid_argument("ReLU error: Input and output size mismatch");
     }
-    T tmp;
     for (size_t i = 0; i < input.size(); i++) {
-        tmp = input[i];
         output[i] = input[i] > 0 ? input[i] : 0;
-        if (std::isnan(output[i]) || std::isinf(output[i])) {
-            std::cout << "Mindfuck at ReLU: input was: " << tmp << std::endl;
-            throw std::invalid_argument("ReLU_derivative error: NaN or Inf");
-        }
     }
     return output;
 }
@@ -108,7 +138,7 @@ inline double CrossEntropy(const Matrix<T> &predict, unsigned int true_label_ind
     if (true_label_index >= predict.size()) {
         throw std::invalid_argument("CrossEntropy: Input and target labels must have the same size");
     }
-    return -log(std::max(predict[true_label_index], (float)1e-3)); // 1e-8 to avoid log(0)
+    return -log(std::max((T)predict[true_label_index], (T)1e-3)); // 1e-8 to avoid log(0)
 }
 
 template<typename T>
@@ -202,8 +232,10 @@ public:
 
     typedef struct s_training_report {
         size_t epochs;
-        std::vector<float> loss;
-        std::vector<float> accuracy;
+        std::vector<double> test_loss;
+        std::vector<double> test_accuracy;
+        std::vector<double> train_loss;
+        std::vector<double> train_accuracy;
     }t_training_report;
 
 private:
@@ -213,6 +245,8 @@ private:
         bool        gradient_cached; // If true, we'll keep data for backprop
         Matrix<T>   weights; // 2D matrix for weights of each link from previous layer (or input) to current layer
         Matrix<T>   biases;  // 1D matrix for biases of each neuron in the current layer
+        Matrix<T>   gamma;
+        Matrix<T>   beta;
         Matrix<T>   cached_output;  // For back-prop
         enum e_activation_method activation_method;
     };
@@ -244,17 +278,18 @@ public:
             l.activation_method = (enum e_activation_method)layer.second;
             double n;
             if (l.activation_method == SOFTMAX) {
-                n = 2.0; // Softmax is a special snowflake
+                n = 1.0; // Softmax is a special snowflake
             } else if (l.activation_method == SIGMOID) {
                 n = 6.0; // Sigmoid is a bit special too
             } else {
                 n = 2.0;
             }
-
             l.weights = Matrix<T>(l.width, _input_size).xavier_init(n);
             l.biases = Matrix<T>(l.width, 1).xavier_init(n);
+            l.gamma = Matrix<T>(l.width, 1).fill(1.0);
+            l.beta = Matrix<T>(l.width, 1).fill(0.0);
             _linear_layers.push_back(l);
-            _input_size = l.width;
+            _input_size = l.width; // Update last, will be used for next layer
         }
         _input_size = input_size;
         std::cout << "Model created with " << _linear_layers.size() << " layers" << std::endl;
@@ -265,22 +300,40 @@ public:
         if (!file.is_open()) {
             throw std::invalid_argument("Load model error: Could not open file");
         }
+        auto get_matrix_line = [&file]() -> Matrix<T> {
+            std::string str;
+            if (!std::getline(file, str))
+                throw std::invalid_argument("Load model error: Invalid file format");
+            return Matrix<T>(str);
+        };
         file >> _input_size >> _output_size >> _learning_rate;
+        size_t input_size = _input_size;
+        int layer_count = 1;
         while (!file.eof() && !file.fail()) {
+            std::cerr << "Parsing layer: " << layer_count++ << std::endl;
             _linear_layers.emplace_back(Layer());
             auto &l = _linear_layers.back();
             int32_t tmp;
-            file >> tmp;
-            l.width = tmp;
-            file >> tmp;
-            l.activation_method = (enum e_activation_method)tmp;
-            std::string str;
-            file >> str;
-            l.weights = Matrix<T>(str);
-            file >> str;
-            l.biases = Matrix<T>(str);
-            if (l.weights.rows() != l.width || l.weights.cols()) {
-                throw std::invalid_argument("Load model error: Weights size mismatch");
+            file >> tmp; if (!tmp) {throw std::invalid_argument("No data");};l.width = tmp;
+            file >> tmp; if (!tmp) {throw std::invalid_argument("No data");};l.activation_method = (enum e_activation_method)tmp;
+            file >> std::ws; // Skip the newline
+            l.weights = get_matrix_line();
+            l.biases = get_matrix_line();
+            l.gamma = get_matrix_line();
+            l.beta = get_matrix_line();
+            if (l.weights.rows() != l.width || l.weights.cols() != input_size) {
+                throw std::invalid_argument("Load model error: weights size mismatch");
+            }
+            if (l.biases.rows() != l.width || l.biases.cols() != 1)
+                throw std::invalid_argument("Load model error: biases size mismatch");
+            if (l.gamma.rows() != l.width || l.gamma.cols() != 1)
+                throw std::invalid_argument("Load model error: gamma size mismatch");
+            if (l.beta.rows() != l.width || l.beta.cols() != 1)
+                throw std::invalid_argument("Load model error: beta size mismatch");
+            input_size = l.width;
+            // Skip empty lines
+            while (file.peek() == '\n') {
+                file.ignore(1);
             }
         }
         file.close();
@@ -303,6 +356,8 @@ public:
             file << layer.width << " " << layer.activation_method << std::endl;
             file << layer.weights.export_string() << std::endl;
             file << layer.biases.export_string() << std::endl;
+            file << layer.gamma.export_string() << std::endl;
+            file << layer.beta.export_string() << std::endl;
         }
         file.close();
     }
@@ -331,9 +386,11 @@ public:
             m += layer.biases;
             switch (layer.activation_method) {
                 case RELU:
+                    // matrix_standardize<T>(m, layer.gamma, layer.beta);
                     ReLU<T>(m, m);
                     break;
                 case SIGMOID:
+                    // matrix_standardize<T>(m, layer.gamma, layer.beta);
                     Sigmoid<T>(m, m);
                     break;
                 case SOFTMAX:
@@ -353,10 +410,9 @@ public:
     /**
      * @brief Backward pass:
      * So basicaly: I have no idea what I'm doing
-     * But, the spirit is there ! *glitters*
      */
     void backward(const Matrix<T> &nn_result, const Matrix<T> &nn_input, size_t true_label_index) {
-
+        // z[l] = w[l] * a[l-1] + b[l]  --> z'[l] = a[l-1] | dz/dw = A^T | dz/db = 1 ; da_dz[l] = σ′(z[l])
         // Initialize the loss and loss gradient
         // loss_gradient = dC/dz[L] = a[L] - y
         Matrix<T> loss_gradient = Matrix<T>(nn_result);
@@ -366,8 +422,7 @@ public:
                 throw std::invalid_argument("Backward error: No gradient cache for layer,"\
                     "forward pass must be called with gradient_cache=true in order to backpropagate");
             }
-            // z[l] = w[l] * a[l-1] + b[l]  --> z'[l] = a[l-1] | dz/dw = A^T | dz/db = 1
-            // da_dz[l] = σ′(z[l])
+
             Matrix<T> &a = _linear_layers[l].cached_output;
             const Matrix<T> &a_prev = l == 0 ? nn_input : _linear_layers[l-1].cached_output;
             Matrix<T> da_dz = Matrix<T>(a.rows(), a.cols());
@@ -380,14 +435,15 @@ public:
                     break;
                 case SOFTMAX:
                     da_dz.fill(1.0); // Cuz double derivative of softmax is 1 so we shortcut it here
+                    // Otherwise, we would have to calculate the derivative of the softmax function
+                    // which involve a Jacobian matrix, expensive to compute
                     break;
                 default:
                     throw std::invalid_argument("Backward error: Unknown activation method");
             }
-                // local_grad is just da/dz scaled by the propagated loss of the front layer
-                // dC_db = da_dz * dz/db = da_dz * 1 = da_dz
-                // dC[l]/dw[l] = da/dz * dz/dw^T
-
+            // local_grad is just da/dz scaled by the propagated loss of the front layer
+            // dC_db = da_dz * dz/db = da_dz * 1 = da_dz
+            // dC[l]/dw[l] = da/dz * dz/dw^T
             Matrix<T> dz_dw_transposed = Matrix<T>(a_prev).as_transposed(); // dz/dw[l] = a[l-1]^T
             Matrix<T> local_grad = Matrix<T>::hadamard(da_dz, loss_gradient); // Hadamard product
             if (l != 0) {
@@ -395,10 +451,24 @@ public:
             }
             Matrix<T> dC_dw = local_grad * dz_dw_transposed;
             Matrix<T> dC_db = local_grad;
+
+
             dC_dw *= _learning_rate;
             dC_db *= _learning_rate;
             _linear_layers[l].weights -= dC_dw;
             _linear_layers[l].biases-= dC_db;
+
+            // Makes it worse, just leaving this in comment for referencing
+            // if (_linear_layers[l].activation_method != SOFTMAX) {
+            //     Matrix<T> standardized = Matrix<T>(a);
+            //     matrix_standardize<T>(standardized, _linear_layers[l].gamma, _linear_layers[l].beta);
+            //     Matrix<T> dC_dgamma = Matrix<T>::hadamard(local_grad, standardized);
+            //     Matrix<T> dC_dbeta = local_grad;
+            //     dC_dgamma *= _learning_rate;
+            //     dC_dbeta *= _learning_rate;
+            //     _linear_layers[l].gamma -= dC_dgamma;
+            //     _linear_layers[l].beta -= dC_dbeta;
+            // }
         }
     }
 
@@ -409,36 +479,19 @@ public:
      * @param track_loss: If true, the loss and accuracy will be tracked
      * @return: A struct containing the training report
      */
-    t_training_report train(size_t epochs, const std::vector<std::pair<Matrix<T>, size_t>> &data, bool track_loss=false) {
+    void train(size_t epochs, const std::vector<std::pair<Matrix<T>, size_t>> &data) {
         std::cout << "Training with " << data.size() << " samples" << std::endl;
-        t_training_report training_data;
-        training_data.epochs = epochs;
-        if (track_loss) {
-            training_data.loss.reserve(epochs);
-            training_data.accuracy.reserve(epochs);
-        }
-        float loss = 0;
         auto shuffled_it = ShuffledIterator<T>(data);
+        double loss;
         for (size_t i = 0; i < epochs; i++) {
             for (auto it = shuffled_it.begin(); it != shuffled_it.end(); it++) {
                 const auto &ret = forward(data[*it].first, true);
-                for (size_t i = 0; i < ret.size(); i++) {
-                    if (std::isnan(ret[i]) || std::isinf(ret[i])) {
-                        std::cout << "Forward result: " << std::endl;
-                        std::cout << ret << std::endl;
-                        throw std::invalid_argument("Train error: NaN or Inf in forward result");
-                    }
-                }
                 backward(_linear_layers.back().cached_output, data[*it].first, data[*it].second);
                 loss = CrossEntropy(_linear_layers.back().cached_output, data[*it].second);
-                if (track_loss) {
-                    training_data.loss.push_back(loss);
-                }
             }
             std::cout << "Epoch " << i+1 << "/ " << epochs << " : loss:" << loss << " " << std::endl;
             shuffled_it.shuffle();
         }
-        return training_data;
     }
 
     /**
@@ -458,19 +511,109 @@ public:
     void test_from_file(const std::string &filename) {
         auto data = load_file<T>(filename, (size_t)_input_size);
         int hits = 0;
+        int i = 1;
+        double loss_sum = 0;
         for (auto &d : data) {
             auto result = forward(d.first, false);
+            double loss = CrossEntropy(result, d.second);
             if (result.argmax_index() == d.second) {
                 hits += 1;
             } else {
-                // std::cout << "Missed with loss: " << CrossEntropy(result, d.second) << std::endl;
+                std::cout << "Missed with loss: " << loss << " at row " << i << std::endl;
             }
+            loss_sum += loss;
+            i++;
         }
-        std::cout << "Accuracy: " << hits << "/" << data.size() << " " << (float)hits / data.size()*100 << " %" << std::endl;
+        std::cout << "Accuracy: " << hits << "/" << data.size() << " " << (double)hits / data.size()*100 << " %\taverage loss: " << loss_sum / data.size() << std::endl;
     }
 
     inline Matrix<T> predict(const Matrix<T> &input) {
         return forward(input, false);
+    }
+
+    t_training_report train_test_earlystop(const std::string &train_file, const std::string &test_file, size_t epochs) {
+        auto train_data = load_file<T>(train_file, (size_t)_input_size);
+        auto test_data = load_file<T>(test_file, (size_t)_input_size);
+        if (train_data.size() == 0 || test_data.size() == 0) {
+            throw std::invalid_argument("Train/Test error: Empty dataset");
+        }
+
+        t_training_report training_report;
+        training_report.epochs = epochs;
+        training_report.train_loss.reserve(epochs);
+        training_report.train_accuracy.reserve(epochs);
+        training_report.test_accuracy.reserve(epochs);
+        training_report.test_loss.reserve(epochs);
+
+        const size_t patience = std::min((size_t)500, epochs / 5);
+        double best_accuracy = 0;
+        size_t patience_counter = 0;
+        std::vector<struct Layer> best_model;
+
+        std::cout << "Training with " << train_data.size() << " samples" << std::endl;
+        std::cout << "Testing with " << test_data.size() << " samples" << std::endl;
+        std::cout << "Patience: " << patience << std::endl;
+
+        auto shuffled_it = ShuffledIterator<T>(train_data);
+        for (size_t i = 0; i < epochs; i++) {
+
+            // Train
+            for (auto it = shuffled_it.begin(); it != shuffled_it.end(); it++) {
+                const auto &ret = forward(train_data[*it].first, true);
+                backward(_linear_layers.back().cached_output, train_data[*it].first, train_data[*it].second);
+            }
+            shuffled_it.shuffle();
+
+            // Train data
+            double loss = 0;
+            int hits = 0;
+            for (auto &d : train_data) {
+                auto result = forward(d.first, false);
+                if (result.argmax_index() == d.second)
+                    hits += 1;
+                loss += CrossEntropy(result, d.second);
+            }
+            training_report.train_loss.push_back(loss / train_data.size());
+            training_report.train_accuracy.push_back((double)hits / train_data.size());
+            // Test data
+            loss = 0;
+            hits = 0;
+            for (auto &d : test_data) {
+                auto result = forward(d.first, false);
+                if (result.argmax_index() == d.second)
+                    hits += 1;
+                loss += CrossEntropy(result, d.second);
+            }
+            double accuracy = (double)hits / test_data.size();
+            training_report.test_loss.push_back(loss / test_data.size());
+            training_report.test_accuracy.push_back(accuracy);
+            std::cout << "Epoch " << i << "/ " << epochs << " : loss: " << loss/ test_data.size() << "  Accuracy: " << accuracy << std::endl;
+            // Caching the model
+            if (accuracy > best_accuracy) {
+                best_accuracy = accuracy;
+                best_model = _linear_layers;
+                patience_counter = 0;
+            } else {
+                patience_counter += 1;
+                if (patience_counter > patience) {
+                    // The best model hasn't improved for a while, let's stop here
+                    std::cout << "Early stopping at epoch " << i << std::endl;
+                    _linear_layers = best_model;
+                    break;
+                }
+            }
+        }
+        _linear_layers = best_model; // Restore the best model
+        double loss = 0;
+        int hits = 0;
+        for (auto &d : test_data) {
+            auto result = forward(d.first, false);
+            if (result.argmax_index() == d.second)
+                hits += 1;
+            loss += CrossEntropy(result, d.second);
+        }
+        std::cout << "Best model : loss: " << loss/test_data.size() << "  Accuracy: " << (double)hits / test_data.size() << std::endl;
+        return training_report;
     }
 };
 

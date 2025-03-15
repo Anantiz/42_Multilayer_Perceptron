@@ -355,7 +355,6 @@ public:
                         __m256 b_vec = _mm256_load_ps(&other._data[k * other._cols + j]);  // Load B[k, j:j+7]
                         sum_vec = _mm256_fmadd_ps(a_vec, b_vec, sum_vec);  // sum += A[i,k] * B[k,j]
                     }
-
                     _mm256_store_ps(&result._data[i * other._cols + j], sum_vec);
                 }
             }
@@ -372,7 +371,6 @@ public:
             }
         }
         #endif
-
         return result;
     }
 
@@ -660,5 +658,16 @@ public:
             }
         }
         return max;
+    }
+
+    T dot(const Matrix<T> &other) const {
+        if (_size != other._size) {
+            throw std::invalid_argument("dot:Matrix dimensions must match");
+        }
+        T result = 0;
+        for (unsigned int i = 0; i < _size; i++) {
+            result += _data[i] * other._data[i];
+        }
+        return result;
     }
 };

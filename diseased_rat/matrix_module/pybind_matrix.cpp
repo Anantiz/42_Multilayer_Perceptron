@@ -49,14 +49,3 @@ void bind_matrix(py::module &m, const std::string &type_name) {
         .def("cols", &Matrix<T>::cols, "Get the number of columns")
         .def("size", &Matrix<T>::size, "Get the total number of elements");
 }
-
-PYBIND11_MODULE(_matrix_module, m) {
-    bind_matrix<float>(m, "MatrixF32");
-}
-
-
-/*
-Time taken for multiplication:  0.08551692962646484
-Time taken for multiplication:  0.08434152603149414
-Time taken for multiplication:  0.08464407920837402
-*/

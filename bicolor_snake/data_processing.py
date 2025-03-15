@@ -18,7 +18,7 @@ def preprocess_data(data_path='data.csv', mapping={'M': 0, 'B': 1}):
     data.drop(data[data.iloc[:,1] == -1].index, inplace=True) # Remove rows with invalid labels
     data.to_csv(data_path, index=False)
 
-def split_data(data_path='data.csv', train_path='train_set.csv', test_path='test_set.csv', frac=0.8):
+def split_data(data_path='data.csv', train_path='train_set.csv', test_path='test_set.csv', frac=0.75):
     data = pd.read_csv(data_path)
     train_data = data.sample(frac=frac)
     test_data = data.drop(train_data.index)
@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--data_path', type=str, default='data.csv', help='Path to the data file')
     parser.add_argument('--train_path', type=str, default='train_set.csv', help='Path to the training data file')
     parser.add_argument('--test_path', type=str, default='test_set.csv', help='Path to the test data file')
-    parser.add_argument('--frac', type=float, default=0.8, help='Fraction of the data to be used for training')
+    parser.add_argument('--frac', type=float, default=0.75, help='Fraction of the data to be used for training')
     args = parser.parse_args()
 
     preprocess_data(args.data_path)
