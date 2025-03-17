@@ -176,7 +176,7 @@ public:
 
     Matrix<T> &randomize(T min, T max) {
         for (unsigned int i = 0; i < _size; i++) {
-            _data[i] = min + (T)rand() / RAND_MAX * (max - min);
+            _data[i] = min + (T)rand() / (float)RAND_MAX * (max - min);
         }
         return *this;
     }

@@ -5,6 +5,7 @@ set -e
 
 # Create virtual environment if it does not exist
 if [ ! -d "./.venv" ]; then
+    echo "Venv not found, creating virtual environment..."
     python3 -m venv .venv
 fi
 
@@ -19,10 +20,12 @@ pip install -r requirements.txt
 cd diseased_rat
 
 # rm -rf build
-# mkdir build
+if [ ! -d "./build" ]; then
+    mkdir build
+fi
 cd build
 
-cmake ..
+cmake .. -Dpybind11_DIR="$(find ../../.venv/lib/ -type d -path '*/pybind11/share/cmake/pybind11')"
 cmake --build .
 
 cd ..
