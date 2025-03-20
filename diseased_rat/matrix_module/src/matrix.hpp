@@ -335,7 +335,7 @@ public:
         Matrix<T> result(_rows, other._cols);
 
         #ifdef __AVX__
-        if (_cols % 8 != 0) {
+        if (_cols % 8 != 0) { // Somewhatof a fix but doesn't profit from AVX
             for (unsigned int i = 0; i < _rows; i++) {
                 for (unsigned int j = 0; j < other._cols; j++) {
                     T sum = 0;
