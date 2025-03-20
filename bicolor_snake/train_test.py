@@ -57,7 +57,7 @@ def plot_report(report):
     plt.plot(np.arange(1, len(report.train_loss) + 1), report.train_loss, label="Train")
     plt.plot(np.arange(1, len(report.test_loss) + 1), report.test_loss, label="Test")
     plt.title("Loss over epochs")
-    plt.xlabel("Time")
+    plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend()
 
@@ -121,32 +121,40 @@ def parse_hidden_layer(s):
 
 def main():
     parser = argparse.ArgumentParser(description='Train a multilayer perceptron')
-    parser.add_argument('--input_size', type=int, required=True, help='Number of input neurons, must be one per feature')
-    parser.add_argument('--output_size', type=int, required=True, help='Number of output neurons, must be one per class')
-    parser.add_argument('--epochs', type=int, required=True, help='Number of epochs to train')
+    parser.add_argument('--load_model_file', type=str, default=None, help='Path to load a weights file') # Group A
+    parser.add_argument('--input_size', type=int, default=None, help='Number of input neurons, must be one per feature')
+    parser.add_argument('--output_size', type=int, default=None, help='Number of output neurons, must be one per class')
+    parser.add_argument('--epochs', type=int, default=None, help='Number of epochs to train')
     parser.add_argument('--training_set_file', type=str, default=None, help='Path to the training set file')
     parser.add_argument('--save_model_file', type=str, default=None, help='Path to save the weights file')
-    parser.add_argument('--load_model_file', type=str, default=None, help='Path to load a weights file')
     parser.add_argument('--learning_rate', type=float, default=0.003, help='Learning rate for training')
     parser.add_argument('--test_set_file', type=str, default=None, help='Path to the test set file')
     parser.add_argument(
     "--hidden_layers",
     type=parse_hidden_layer,
     nargs="+",
-    required=True,
+    default=None,
     help="Hidden layers as space-separated tuples: (width, activation) (width, activation) ..."
     )
     args = parser.parse_args()
-    print(f"Training MLP with input size {args.input_size}, output size {args.output_size}, epochs {args.epochs},"
-        f"training set file {args.training_set_file}, save weights file {args.save_model_file} and hidden layers:\n {args.hidden_layers}")
 
 
     if args.load_model_file is not None:
+        print(f"Loading MLP from {args.load_model_file}")
         mlp = init_mlp_file(args.load_model_file)
         if args.test_set_file is not None:
             print("Evaluating MLP")
             mlp.test_from_file(args.test_set_file)
+        else:
+            print("No test set provided, exiting")
+            sys.exit(1)
     else:
+        if (args.input_size is None or args.output_size is None or args.epochs is None or args.hidden_layers is None):
+            print("Missing required arguments for training, exiting")
+            sys.exit(1)
+
+        print(f"Training MLP with input size {args.input_size}, output size {args.output_size}, epochs {args.epochs},"
+            f"training set file {args.training_set_file}, save weights file {args.save_model_file} and hidden layers:\n {args.hidden_layers}")
         mlp = init_mlp(args.input_size, args.output_size, args.learning_rate, args.hidden_layers)
         if (args.training_set_file is not None and args.test_set_file is not None):
             train_with_tests(args.epochs, mlp, args.training_set_file, args.test_set_file, args.save_model_file)

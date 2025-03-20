@@ -314,9 +314,13 @@ public:
             _linear_layers.emplace_back(Layer());
             auto &l = _linear_layers.back();
             int32_t tmp;
-            file >> tmp; if (!tmp) {throw std::invalid_argument("No data");};l.width = tmp;
-            file >> tmp; if (!tmp) {throw std::invalid_argument("No data");};l.activation_method = (enum e_activation_method)tmp;
-            file >> std::ws; // Skip the newline
+            if (file >> tmp) {
+                l.width = tmp;
+            } else throw std::invalid_argument("Invalid file format");
+            if (file >> tmp) {
+                l.activation_method = (enum e_activation_method)tmp;
+            } else throw std::invalid_argument("Invalid file format");
+            if (!(file >> std::ws)) throw std::invalid_argument("Invalid file format");// Skip the newline
             l.weights = get_matrix_line();
             l.biases = get_matrix_line();
             l.gamma = get_matrix_line();
@@ -484,12 +488,13 @@ public:
         auto shuffled_it = ShuffledIterator<T>(data);
         double loss;
         for (size_t i = 0; i < epochs; i++) {
+            loss = 0;
             for (auto it = shuffled_it.begin(); it != shuffled_it.end(); it++) {
-                const auto &ret = forward(data[*it].first, true);
+                forward(data[*it].first, true); // ignore return value as it is cached
                 backward(_linear_layers.back().cached_output, data[*it].first, data[*it].second);
-                loss = CrossEntropy(_linear_layers.back().cached_output, data[*it].second);
+                loss += CrossEntropy(_linear_layers.back().cached_output, data[*it].second);
             }
-            std::cout << "Epoch " << i+1 << "/ " << epochs << " : loss:" << loss << " " << std::endl;
+            std::cout << "Epoch " << i+1 << "/ " << epochs << " : average loss:" << loss/data.size() << " " << std::endl;
             shuffled_it.shuffle();
         }
     }
@@ -545,7 +550,7 @@ public:
         training_report.test_accuracy.reserve(epochs);
         training_report.test_loss.reserve(epochs);
 
-        const size_t patience = std::min((size_t)500, epochs / 5);
+        const size_t patience = std::max((size_t)50, std::min((size_t)500, epochs / 5));
         double best_accuracy = 0;
         size_t patience_counter = 0;
         std::vector<struct Layer> best_model;
@@ -559,12 +564,12 @@ public:
 
             // Train
             for (auto it = shuffled_it.begin(); it != shuffled_it.end(); it++) {
-                const auto &ret = forward(train_data[*it].first, true);
+                forward(train_data[*it].first, true);
                 backward(_linear_layers.back().cached_output, train_data[*it].first, train_data[*it].second);
             }
             shuffled_it.shuffle();
 
-            // Train data
+            // Test on training set
             double loss = 0;
             int hits = 0;
             for (auto &d : train_data) {
@@ -575,7 +580,7 @@ public:
             }
             training_report.train_loss.push_back(loss / train_data.size());
             training_report.train_accuracy.push_back((double)hits / train_data.size());
-            // Test data
+            // Test on validation set
             loss = 0;
             hits = 0;
             for (auto &d : test_data) {
@@ -587,7 +592,7 @@ public:
             double accuracy = (double)hits / test_data.size();
             training_report.test_loss.push_back(loss / test_data.size());
             training_report.test_accuracy.push_back(accuracy);
-            std::cout << "Epoch " << i << "/ " << epochs << " : loss: " << loss/ test_data.size() << "  Accuracy: " << accuracy << std::endl;
+            std::cout << "Epoch " << i+1 << "/ " << epochs << " : loss: " << loss/ test_data.size() << "  Accuracy: " << accuracy << std::endl;
             // Caching the model
             if (accuracy > best_accuracy) {
                 best_accuracy = accuracy;
@@ -597,7 +602,7 @@ public:
                 patience_counter += 1;
                 if (patience_counter > patience) {
                     // The best model hasn't improved for a while, let's stop here
-                    std::cout << "Early stopping at epoch " << i << std::endl;
+                    std::cout << "Early stopping at epoch " << i+1 << std::endl;
                     _linear_layers = best_model;
                     break;
                 }
