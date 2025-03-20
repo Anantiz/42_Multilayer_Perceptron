@@ -25,6 +25,7 @@ if [ ! -d "./build" ]; then
 fi
 cd build
 
+# In case the system is out of date you have to manually link pybind11
 cmake .. -Dpybind11_DIR="$(find ../../.venv/lib/ -type d -path '*/pybind11/share/cmake/pybind11')"
 cmake --build .
 

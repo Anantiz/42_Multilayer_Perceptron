@@ -638,7 +638,7 @@ public:
         return result;
     }
 
-    T argmax_index() const {
+    size_t argmax_index() const {
         T max = _data[0];
         T index = 0;
         for (unsigned int i = 1; i < _size; i++) {

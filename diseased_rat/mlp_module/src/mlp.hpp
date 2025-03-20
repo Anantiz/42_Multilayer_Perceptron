@@ -134,11 +134,13 @@ Matrix<T> Softmax_derivative(Matrix<T> &softmax) {
  * So, it's a log-loss function, but it's called cross-entropy somehow1
  */
 template<typename T>
-inline double CrossEntropy(const Matrix<T> &predict, unsigned int true_label_index) {
+inline double CrossEntropy(const Matrix<T> &predict, size_t true_label_index) {
     if (true_label_index >= predict.size()) {
         throw std::invalid_argument("CrossEntropy: Input and target labels must have the same size");
     }
-    return -log(std::max((T)predict[true_label_index], (T)1e-3)); // 1e-8 to avoid log(0)
+    auto y = true_label_index == predict.argmax_index() ? 1 : 0;
+    auto p = std::clamp((double)predict[true_label_index], EPSILON, 1.0 - EPSILON);
+    return -(y*log(p) + (1-y)*log(1-p));
 }
 
 template<typename T>
@@ -550,10 +552,12 @@ public:
         training_report.test_accuracy.reserve(epochs);
         training_report.test_loss.reserve(epochs);
 
-        const size_t patience = std::max((size_t)50, std::min((size_t)500, epochs / 5));
-        double best_accuracy = 0;
+        const size_t patience = std::max((size_t)50, std::min((size_t)3000, epochs / 5));
+        const double threshold = 0.001;
+        double best_loss = 999;
         size_t patience_counter = 0;
         std::vector<struct Layer> best_model;
+        int best_model_epoch = 0;
 
         std::cout << "Training with " << train_data.size() << " samples" << std::endl;
         std::cout << "Testing with " << test_data.size() << " samples" << std::endl;
@@ -590,19 +594,22 @@ public:
                 loss += CrossEntropy(result, d.second);
             }
             double accuracy = (double)hits / test_data.size();
-            training_report.test_loss.push_back(loss / test_data.size());
+            double loss_avg = loss / test_data.size();
+            training_report.test_loss.push_back(loss_avg);
             training_report.test_accuracy.push_back(accuracy);
-            std::cout << "Epoch " << i+1 << "/ " << epochs << " : loss: " << loss/ test_data.size() << "  Accuracy: " << accuracy << std::endl;
+            std::cout << "Epoch " << i+1 << "/ " << epochs << " : loss average: " << loss_avg << "  Accuracy: " << accuracy << std::endl;
             // Caching the model
-            if (accuracy > best_accuracy) {
-                best_accuracy = accuracy;
+            if (loss_avg < best_loss) {
+                best_loss = loss_avg;
                 best_model = _linear_layers;
-                patience_counter = 0;
+                best_model_epoch = i;
+                if (best_loss - loss_avg > threshold)
+                    patience_counter = 0;
             } else {
                 patience_counter += 1;
                 if (patience_counter > patience) {
                     // The best model hasn't improved for a while, let's stop here
-                    std::cout << "Early stopping at epoch " << i+1 << std::endl;
+                    std::cout << "Early stopping at epoch " << i+1 << " using model from epoch " << best_model_epoch+1 << std::endl;
                     _linear_layers = best_model;
                     break;
                 }
